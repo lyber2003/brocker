@@ -1,0 +1,261 @@
+#!/bin/bash
+
+commands[0]="pr,restart php,php"
+commands[1]="nr,restart nginx,nginx"
+commands[2]="dr,restart postgres,db-psql"
+commands[3]="cu,run composer update,php"
+commands[4]="ld,load dump to database,db-psql"
+commands[5]="mu,migrations up,php"
+commands[6]="cm,load dump and run migrations"
+commands[7]="start,start environment(docker-compose up -d),start,php"
+commands[8]="stop,stop containers,stop,php"
+commands[9]="fr,first run - migrations up and load dump,php"
+commands[10]="ca,delete all containers and images. Be carefully!,php"
+commands[11]="sa,stop all containers,php"
+commands[12]="cr,remove all containers,php"
+commands[13]="ir,remove all images,php"
+commands[14]="nb,delete all containers and images,php"
+commands[15]="lf,load fixtures,db-psql"
+commands[16]="cd,create dump,db-psql"
+commands[17]="dd,drop database,db-psql"
+commands[18]="pl,Postgresql log all"
+
+options[0]="-h ,this help"
+options[1]="--help,this help"
+options[2]="-v,current version"
+options[3]="--version,current version"
+
+version=0.01
+
+
+
+comand=$1
+option=$1
+
+array=''
+
+start() {
+    docker-compose up -d
+    docker exec $(name)_php_1 chmod -R 777 /var/www
+    sleep  10
+    docker exec $(name)_php_1 cp /var/www/market/www/crontab /etc/cron.d/market-cron
+    docker exec $(name)_php_1 chmod 0644 /etc/cron.d/market-cron
+    docker exec $(name)_php_1 touch /var/log/cron.log
+    docker-compose ps
+
+}
+
+stop() {
+    docker-compose stop
+    docker-compose ps
+}
+
+cu(){
+    docker exec $(name)_php_1 composer update
+}
+
+mu() {
+     docker exec $(name)_php_1 php  app/migration/phinx migrate
+}
+
+ld() {
+    #docker exec $(name)_db-psql_1 pg_restore -d dev_soscredit docker/db-psql/pg_dump/dump.sql
+    docker exec $(name)_db-psql_1 pg_restore -d dev_soscredit docker/db-psql/pg_dump/dump_170516.dump
+}
+cm() {
+
+docker exec $(name)_db-psql_1 psql -U root -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid)
+FROM pg_stat_activity
+WHERE pg_stat_activity.datname = 'dev_soscredit'
+  AND pid <> pg_backend_pid();"
+
+    docker exec $(name)_db-psql_1 psql -U root -d postgres -c "DROP DATABASE IF EXISTS dev_soscredit"
+    docker exec $(name)_db-psql_1 psql -U root -d postgres -c "CREATE DATABASE dev_soscredit"
+    docker exec $(name)_db-psql_1 pg_restore -d dev_soscredit docker/db-psql/pg_dump/dump_170516.dump
+    docker exec $(name)_php_1 php  app/migration/phinx migrate
+
+}
+
+
+pr() {
+    docker exec $(name)_php_1 service php restart
+}
+
+dr() {
+    docker exec $(name)_db-psql_1 service postgresql restart
+}
+
+nr() {
+    echo "$(name)_nginx_1 service nginx reload"
+    docker exec $(name)_nginx_1 service nginx reload
+}
+
+ca() {
+    docker rm -f $(docker ps -a -q)
+    docker rmi -f $(docker images -a -q)
+}
+
+sa() {
+    echo 'stop all containers'q
+    docker stop $(docker ps -a -q)
+}
+
+cr() {
+    docker rm $(docker ps -a -q)
+}
+
+ir() {
+    docker rmi $(docker images -a -q)
+}
+
+lf() {
+    docker exec $(name)_db-psql_1 ./load_fixtures.sh
+}
+
+cd() {
+    docker exec $(name)_db-psql_1 pg_dump -Fc dev_soscredit > docker/db-psql/pg_dump/dump.sql
+}
+
+dd() {
+    docker exec $(name)_db-psql_1 psql -U root -d postgres -c "DROP DATABASE IF EXISTS dev_soscredit"
+    docker exec $(name)_db-psql_1 psql -U root -d postgres -c "CREATE DATABASE dev_soscredit"
+}
+
+fr(){
+
+    start
+    ld
+    cu
+    mu
+}
+
+get_options () {
+        for index in "${!options[@]}"
+        do
+            IFS='_' read -r -a array <<< "${options[index]}"
+            size=${#array[0]}
+            local test=" "
+            for (( c=1; c<=10-$size; c++ ))
+            do
+                test=${test}" "
+            done
+            echo '       '${array[0]}"$test"${array[1]}
+        done
+}
+
+
+get_commands () {
+        for index in "${!commands[@]}"
+        do
+            IFS=',' read -r -a array <<< "${commands[index]}"
+            size=${#array[0]}
+            local test=" "
+            for (( c=1; c<=10-$size; c++ ))
+            do
+                test=${test}" "
+            done
+            echo '       '${array[0]}"$test"${array[1]}
+        done
+}
+
+name () {
+
+        IFS=', /' read -r -a array <<< "$PWD"
+        for index in "${!array[@]}"
+        do
+            i=$index
+        done
+        IFS='-_' read -r -a array <<< "${array[index]}"
+        for index in "${!array[@]}"
+        do
+            str="$str${array[index]}"
+        done
+        echo $str
+}
+run_commands () {
+
+
+        for index in "${!commands[@]}"
+        do
+            IFS=',' read -r -a array <<< "${commands[index]}"
+                if [ ${array[0]}"" == $comand ]; then
+                    $comand
+                    exit 1;
+                fi
+        done
+}
+
+run_options () {
+        for index in "${!options[@]}"
+        do
+            IFS=',' read -r -a array <<< "${options[index]}"
+                if [ ${array[0]}"" == $option ]; then
+                    echo "options: "${array[0]}" "${array[1]}
+                    exit 1;
+                fi
+        done
+}
+
+
+
+
+
+
+name=$1
+log_file="Logone.txt"
+
+if [[ -n "$name" ]]; then
+
+         #echo   $(name)$(run_commands)
+        run_commands
+
+        for index in "${!array[@]}"
+        do
+            i=$index
+        done
+
+
+    case $1 in
+    php)
+       # echo enter into php container
+
+       #exec docker exec $(name) echo hello
+
+       ;;
+    esac
+
+else
+
+t="$(cat <<-EOF
+Usage: soscredit [OPTIONS] COMMAND [arg...]
+
+       soscredit [ --help | -v | --version ]
+
+Help script for soscredit project.
+
+Options:
+
+EOF
+)"
+
+
+b="$(cat <<-EOF
+
+Run 'soscredit COMMAND --help' for more information on a command.
+EOF
+)"
+
+echo "$t"
+               # if [ ${array[0]}"" == $option ]; then
+               #     echo "options: "${array[0]}" "${array[1]}
+               #     exit 1;
+               # fi
+get_options
+echo "Commands:"
+get_commands
+echo "$b"
+
+fi
+
+#http://www.tldp.org/LDP/abs/html/complexfunct.html
+

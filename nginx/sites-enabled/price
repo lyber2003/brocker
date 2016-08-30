@@ -1,0 +1,46 @@
+server {
+	listen 80;
+	# server_name "~^(price)\.{1}(?<user>\w+)\.?(?<domain>\.{1}\w+)$";
+	server_name "~^(?<domain>\.{1}\w+)$";
+	charset utf-8;
+	access_log  /var/log/nginx/vbo.com.access.log;
+	error_log  /var/log/nginx/vbo.error.log;
+	client_max_body_size 1000m;
+
+    root /var/www/vbo/web;
+
+	# strip app.php/ prefix if it is present
+	rewrite ^/app\.php/?(.*)$ /$1 permanent;
+
+	location / {
+
+		# deny all;
+		index app.php;
+		try_files $uri @rewriteapp;
+	}
+
+	location @rewriteapp {
+		rewrite ^(.*)$ /app.php/$1 last;
+	}
+
+	# pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+	location ~ ^/(app|app_dev)\.php(/|$) {
+		fastcgi_pass   php-upstream;
+		fastcgi_split_path_info ^(.+\.php)(/.*)$;
+        	fastcgi_connect_timeout 60;
+        	fastcgi_send_timeout 180;
+        	fastcgi_read_timeout 360;
+		include fastcgi_params;
+		fastcgi_param  SCRIPT_FILENAME    $document_root$fastcgi_script_name;
+		fastcgi_param  HTTPS              off;
+	set $appEnv 'prod';
+	if ($http_cookie ~ "dev_cookie=secret_value" ) {
+	    set  $appEnv 'dev';
+	}
+
+	fastcgi_param   APPLICATION_ENV  $appEnv;
+	fastcgi_param   SYMFONY__BASE__HOST    $domain;
+
+	}
+}
+

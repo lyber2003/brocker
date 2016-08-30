@@ -1,0 +1,70 @@
+application:
+    build: application
+    volumes:
+        - ./sites/vbo:/var/www/vbo
+    tty: true
+#db:
+#    build: db
+#    ports:
+#        - 3306:3306
+#    environment:
+#        MYSQL_ROOT_PASSWORD: root
+#        MYSQL_USER: root
+#        MYSQL_PASSWORD: root
+#    volumes_from:
+#        - application
+#    volumes:
+#        - ./db/data:/var/lib/mysql
+#redis:
+#    image: redis
+#    ports:
+#        - 6379:6379
+php:
+    image: lyber/php
+    ports:
+        - 9000:9000
+#    links:
+#        - db
+#        - redis
+#        - memcached
+#        - sphinx
+    volumes_from:
+        - application
+php1:
+    image: lyber/php
+    ports:
+        - 9002:9002
+#    links:
+#        - db
+#        - redis
+#        - memcached
+#        - sphinx
+    volumes_from:
+        - application
+nginx:
+    build: nginx
+    ports:
+        - 80:80
+    links:
+        - php
+        - php1
+    volumes_from:
+        - application
+    volumes:
+        - ./nginx/log:/var/log/nginx
+        - ./nginx/sites-enabled:/etc/nginx/sites-enabled/
+        - ./nginx/conf.d:/etc/nginx/conf.d/
+#memcached:
+#    image: memcached
+#    ports:
+#        - 11211:11211
+#sphinx:
+#    image: centurylink/sphinx
+#    ports:
+#        - 9306:9306
+#    links:
+#        - db
+#    volumes:
+#        - ./sphinx/logs:/var/log/sphinxsearch/
+#        - ./sphinx:/usr/local/etc
+#        - ./sphinx/data:/var/lib/sphinxsearch/data/svit/
